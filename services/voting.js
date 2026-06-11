@@ -26,9 +26,9 @@ async function castVote(applicationId, memberId, voteType) {
 
     // Record vote
     votes[memberId] = {
-      ...votes[memberId],
-      vote: voteType,
-      votedAt: now,
+      memberName: (votes[memberId] && votes[memberId].memberName) || null,
+      vote: voteType || null,
+      votedAt: now || null,
       changedFrom: (previousVote && previousVote !== voteType) ? previousVote : (votes[memberId] && votes[memberId].changedFrom) || null,
       changedAt: (previousVote && previousVote !== voteType) ? now : (votes[memberId] && votes[memberId].changedAt) || null
     };
