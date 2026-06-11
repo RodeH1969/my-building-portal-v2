@@ -122,10 +122,12 @@ router.get('/portal/:accessToken', async (req, res) => {
     }
 
     // Get all applications for this building
+    console.log('Portal query for buildingKey:', memberData.buildingKey);
     const appsSnap = await db.ref('applications')
       .orderByChild('buildingKey').equalTo(memberData.buildingKey).once('value');
 
     const allApps = appsSnap.val() ? Object.values(appsSnap.val()) : [];
+    console.log('Applications found:', allApps.length, allApps.map(a => ({ref: a.ref, status: a.status, buildingKey: a.buildingKey})));
 
     // Separate active and closed
     const activeApps = allApps
