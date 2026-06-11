@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>My Building Portal — Committee</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Barlow',sans-serif;background:#f4f5f7;color:#1a2333;font-size:13px;}
+.hdr{background:#1a3a5c;padding:14px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;}
+.hdr-logo{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;color:#fff;line-height:1.1;}
+.hdr-logo span{color:#c4a038;}
+.hdr-member{margin-left:auto;text-align:right;}
+.hdr-name{font-size:13px;font-weight:600;color:#fff;}
+.hdr-building{font-size:11px;color:rgba(255,255,255,0.5);}
+.main{max-width:760px;margin:0 auto;padding:20px 16px;}
+.section-head{font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:#1a2333;margin:20px 0 10px;display:flex;align-items:center;gap:8px;}
+.badge{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#d84a30;color:#fff;font-size:11px;font-weight:700;}
+.app-card{background:#fff;border:1px solid #e2e5ea;border-radius:12px;margin-bottom:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);}
+.app-card-header{padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:background 0.15s;}
+.app-card-header:hover{background:#f8f9fb;}
+.app-type{font-size:13px;font-weight:600;color:#1a2333;}
+.app-meta{font-size:11px;color:#7a8499;margin-top:2px;}
+.status-badge{padding:3px 9px;border-radius:10px;font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;flex-shrink:0;margin-left:auto;}
+.s-pending{background:#e8f0fb;color:#1a5a9e;}
+.s-awaiting{background:#fffbf0;color:#c4a038;}
+.s-approved{background:#f0faf4;color:#2d9e5c;}
+.s-rejected{background:#fff3f0;color:#d84a30;}
+.s-lapsed{background:#f4f5f7;color:#7a8499;}
+.s-received{background:#f4f5f7;color:#7a8499;}
+.my-vote{font-size:10px;font-weight:600;padding:2px 7px;border-radius:8px;margin-left:6px;}
+.mv-approve{background:#f0faf4;color:#2d9e5c;}
+.mv-reject{background:#fff3f0;color:#d84a30;}
+.mv-info{background:#fffbf0;color:#c4a038;}
+.mv-none{background:#f4f5f7;color:#9aa3b2;}
+.tally-bar{display:flex;gap:6px;padding:0 16px 10px;align-items:center;}
+.tally-item{font-size:11px;color:#5a6478;}
+.tally-item strong{color:#1a2333;}
+.expand-body{display:none;border-top:1px solid #f0f2f5;padding:16px;}
+.expand-body.open{display:block;}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+.detail-item{background:#f8f9fb;border-radius:8px;padding:10px 12px;}
+.detail-label{font-size:9px;font-weight:600;color:#9aa3b2;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:3px;}
+.detail-value{font-size:13px;color:#1a2333;font-weight:500;}
+.info-thread{background:#fffbf0;border:1px solid #f0dfa0;border-radius:8px;padding:12px;margin-bottom:14px;}
+.info-thread-title{font-size:11px;font-weight:700;color:#7a5c10;margin-bottom:8px;}
+.thread-entry{padding:8px 0;border-bottom:1px solid #f0dfa0;}
+.thread-entry:last-child{border-bottom:none;}
+.thread-type{font-size:9px;font-weight:700;color:#c4a038;text-transform:uppercase;letter-spacing:0.06em;}
+.thread-author{font-size:10px;color:#9aa3b2;margin:2px 0;}
+.thread-content{font-size:12px;color:#1a2333;}
+.votes-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;}
+.vote-chip{padding:5px 10px;border-radius:8px;font-size:11px;font-weight:600;border:1px solid #e2e5ea;}
+.vc-approve{background:#f0faf4;border-color:#a8dbb8;color:#2d9e5c;}
+.vc-reject{background:#fff3f0;border-color:#fcd4cc;color:#d84a30;}
+.vc-info{background:#fffbf0;border-color:#f0dfa0;color:#c4a038;}
+.vc-null{background:#f4f5f7;border-color:#e2e5ea;color:#9aa3b2;}
+.vote-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+.btn-approve{padding:10px 18px;background:#2d9e5c;border:none;border-radius:9px;color:#fff;font-family:'Barlow',sans-serif;font-size:13px;font-weight:700;cursor:pointer;}
+.btn-approve:hover{background:#257a48;}
+.btn-reject{padding:10px 18px;background:#d84a30;border:none;border-radius:9px;color:#fff;font-family:'Barlow',sans-serif;font-size:13px;font-weight:700;cursor:pointer;}
+.btn-reject:hover{background:#b83a22;}
+.btn-info{padding:10px 18px;background:#c4a038;border:none;border-radius:9px;color:#fff;font-family:'Barlow',sans-serif;font-size:13px;font-weight:700;cursor:pointer;}
+.btn-info:hover{background:#a08028;}
+.btn-change{padding:8px 14px;background:#fff;border:1px solid #e2e5ea;border-radius:9px;color:#5a6478;font-family:'Barlow',sans-serif;font-size:12px;cursor:pointer;}
+.btn-change:hover{border-color:#1a5a9e;color:#1a5a9e;}
+.info-form{margin-top:10px;display:none;}
+.info-form.open{display:block;}
+.info-form textarea{width:100%;border:1px solid #e2e5ea;border-radius:8px;padding:10px;font-family:'Barlow',sans-serif;font-size:13px;outline:none;min-height:80px;resize:vertical;}
+.info-form textarea:focus{border-color:#c4a038;}
+.btn-send-info{width:100%;padding:11px;background:#c4a038;border:none;border-radius:9px;color:#fff;font-family:'Barlow',sans-serif;font-size:13px;font-weight:700;cursor:pointer;margin-top:8px;}
+.voted-display{padding:10px 12px;background:#f8f9fb;border-radius:9px;font-size:12px;color:#5a6478;margin-bottom:8px;}
+.voted-display strong{color:#1a2333;}
+.urgency{font-size:10px;color:#d84a30;font-weight:700;margin-top:2px;}
+.empty{text-align:center;padding:40px 20px;color:#9aa3b2;font-size:13px;}
+.loading{text-align:center;padding:60px 20px;color:#9aa3b2;}
+.error-card{background:#fff3f0;border:1px solid #fcd4cc;border-radius:12px;padding:24px;text-align:center;color:#d84a30;}
+.closed-section{margin-top:30px;}
+.app-card.closed .app-card-header{opacity:0.7;}
+.arrow{margin-left:6px;color:#b0b8c8;font-size:12px;transition:transform 0.2s;}
+.arrow.open{transform:rotate(90deg);}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1a3a5c;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:1000;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
+.toast.show{display:block;}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-logo">MY BUILDING<br><span>PORTAL</span></div>
+  <div class="hdr-member">
+    <div class="hdr-name" id="member-name">Loading...</div>
+    <div class="hdr-building" id="member-building"></div>
+  </div>
+</div>
+
+<div class="main" id="main-content">
+  <div class="loading">Loading your portal...</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const token = window.location.pathname.split('/portal/')[1];
+let memberData = null;
+let portalData = null;
+
+async function loadPortal() {
+  try {
+    const res = await fetch(`/api/portal/${token}`);
+    if (!res.ok) {
+      const err = await res.json();
+      showError(err.error || 'Invalid portal link');
+      return;
+    }
+    portalData = await res.json();
+    memberData = portalData.member;
+
+    document.getElementById('member-name').textContent = memberData.name;
+    document.getElementById('member-building').textContent = memberData.building;
+    document.title = `${memberData.name} — My Building Portal`;
+
+    renderDashboard();
+  } catch (err) {
+    showError('Failed to load portal. Please try again.');
+  }
+}
+
+function renderDashboard() {
+  const active = portalData.activeApplications || [];
+  const closed = portalData.closedApplications || [];
+  const main = document.getElementById('main-content');
+
+  let html = '';
+
+  // Active applications
+  html += `<div class="section-head">
+    Active Applications
+    ${active.length > 0 ? `<span class="badge">${active.length}</span>` : ''}
+  </div>`;
+
+  if (active.length === 0) {
+    html += `<div class="empty">No applications currently require your attention.</div>`;
+  } else {
+    active.forEach(app => { html += renderAppCard(app, false); });
+  }
+
+  // Closed applications
+  if (closed.length > 0) {
+    html += `<div class="section-head closed-section">Recent Decisions</div>`;
+    closed.forEach(app => { html += renderAppCard(app, true); });
+  }
+
+  main.innerHTML = html;
+}
+
+function renderAppCard(app, isClosed) {
+  const myVote = app.votes && app.votes[memberData.id];
+  const myVoteVal = myVote ? myVote.vote : null;
+
+  const statusLabels = {
+    pending_vote: 'Vote Required',
+    awaiting_info: 'Awaiting Info',
+    approved: 'Approved',
+    rejected: 'Rejected',
+    lapsed: 'Lapsed',
+    received: 'Received'
+  };
+  const statusClass = {
+    pending_vote: 's-pending',
+    awaiting_info: 's-awaiting',
+    approved: 's-approved',
+    rejected: 's-rejected',
+    lapsed: 's-lapsed',
+    received: 's-received'
+  };
+
+  const myVoteLabel = myVoteVal === 'approve' ? 'You: Approved' : myVoteVal === 'reject' ? 'You: Rejected' : myVoteVal === 'info' ? 'You: Info Req.' : 'You: Not voted';
+  const myVoteClass = myVoteVal === 'approve' ? 'mv-approve' : myVoteVal === 'reject' ? 'mv-reject' : myVoteVal === 'info' ? 'mv-info' : 'mv-none';
+
+  const votes = app.votes ? Object.values(app.votes) : [];
+  const approvals = votes.filter(v => v.vote === 'approve').length;
+  const rejections = votes.filter(v => v.vote === 'reject').length;
+  const total = votes.filter(v => v.vote).length;
+
+  const daysOld = Math.floor((Date.now() - new Date(app.submittedAt)) / (1000 * 60 * 60 * 24));
+  const isUrgent = !isClosed && !myVoteVal && daysOld >= 1;
+
+  return `
+    <div class="app-card${isClosed ? ' closed' : ''}" id="card-${app.applicationId}">
+      <div class="app-card-header" onclick="toggleCard('${app.applicationId}')">
+        <div>
+          <div class="app-type">
+            ${app.formLabel}
+            <span class="my-vote ${myVoteClass}">${myVoteLabel}</span>
+          </div>
+          <div class="app-meta">Lot ${app.lot} · ${app.ref} · ${daysOld === 0 ? 'Today' : daysOld + ' days ago'}</div>
+          ${isUrgent ? `<div class="urgency">⚠️ Your vote is required</div>` : ''}
+        </div>
+        <span class="status-badge ${statusClass[app.status] || 's-pending'}">${statusLabels[app.status] || app.status}</span>
+        <span class="arrow" id="arrow-${app.applicationId}">›</span>
+      </div>
+      ${!isClosed ? `
+      <div class="tally-bar">
+        <span class="tally-item">✓ <strong>${approvals}</strong> approve</span>
+        <span class="tally-item" style="margin-left:10px;">✗ <strong>${rejections}</strong> reject</span>
+        <span class="tally-item" style="margin-left:10px;"><strong>${app.committeeSnapshot.requiredVotes}</strong> needed</span>
+      </div>` : ''}
+      <div class="expand-body" id="expand-${app.applicationId}">
+        ${renderExpandedCard(app, myVoteVal, isClosed)}
+      </div>
+    </div>
+  `;
+}
+
+function renderExpandedCard(app, myVoteVal, isClosed) {
+  // Application details
+  let html = `<div class="detail-grid">
+    <div class="detail-item"><div class="detail-label">Building</div><div class="detail-value">${app.building}</div></div>
+    <div class="detail-item"><div class="detail-label">Lot</div><div class="detail-value">${app.lot}</div></div>
+    <div class="detail-item"><div class="detail-label">Applicant</div><div class="detail-value">${app.submittedByName || 'Unknown'}</div></div>
+    <div class="detail-item"><div class="detail-label">Submitted</div><div class="detail-value">${new Date(app.submittedAt).toLocaleDateString('en-AU')}</div></div>
+  </div>`;
+
+  // Form data
+  if (app.formData) {
+    html += `<div style="background:#f8f9fb;border-radius:8px;padding:12px;margin-bottom:14px;">
+      <div style="font-size:10px;font-weight:700;color:#9aa3b2;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Application Details</div>`;
+    Object.entries(app.formData).forEach(([k, v]) => {
+      if (!v) return;
+      const label = k.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+      html += `<div style="display:flex;gap:8px;padding:3px 0;font-size:12px;">
+        <span style="color:#9aa3b2;min-width:120px;">${label}</span>
+        <span style="color:#1a2333;font-weight:500;">${v}</span>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Info thread
+  if (app.infoThread) {
+    const entries = Object.values(app.infoThread).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    if (entries.length > 0) {
+      html += `<div class="info-thread">
+        <div class="info-thread-title">💬 Information Exchange</div>`;
+      entries.forEach(e => {
+        const typeLabel = e.type === 'question' ? 'Committee Question' : e.type === 'addendum' ? 'Additional Question' : 'Applicant Response';
+        const typeColor = e.type === 'response' ? '#2d9e5c' : '#c4a038';
+        html += `<div class="thread-entry">
+          <div class="thread-type" style="color:${typeColor};">${typeLabel}</div>
+          <div class="thread-author">${e.memberName} · ${new Date(e.timestamp).toLocaleString('en-AU')}</div>
+          <div class="thread-content">${e.content}</div>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+  }
+
+  // All votes
+  if (app.votes) {
+    html += `<div style="margin-bottom:14px;">
+      <div style="font-size:10px;font-weight:700;color:#9aa3b2;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Committee Votes</div>
+      <div class="votes-grid">`;
+    Object.entries(app.votes).forEach(([mid, v]) => {
+      const vClass = v.vote === 'approve' ? 'vc-approve' : v.vote === 'reject' ? 'vc-reject' : v.vote === 'info' ? 'vc-info' : 'vc-null';
+      const vLabel = v.vote ? v.vote.charAt(0).toUpperCase() + v.vote.slice(1) : 'Not voted';
+      html += `<div class="vote-chip ${vClass}">${v.memberName}: ${vLabel}</div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  // Vote actions (only for active applications)
+  if (!isClosed && ['pending_vote', 'awaiting_info'].includes(app.status)) {
+    if (myVoteVal && myVoteVal !== 'info') {
+      // Already voted — show current vote and change button
+      const voteLabel = myVoteVal === 'approve' ? '✓ Approved' : '✗ Rejected';
+      const voteColor = myVoteVal === 'approve' ? '#2d9e5c' : '#d84a30';
+      html += `<div class="voted-display">
+        Your current vote: <strong style="color:${voteColor};">${voteLabel}</strong>
+        <button class="btn-change" onclick="showVoteChange('${app.applicationId}')" style="margin-left:10px;">Change vote</button>
+      </div>
+      <div id="vote-change-${app.applicationId}" style="display:none;">
+        <div class="vote-actions">
+          <button class="btn-approve" onclick="castVote('${app.applicationId}','approve')">✓ Approve</button>
+          <button class="btn-reject" onclick="castVote('${app.applicationId}','reject')">✗ Reject</button>
+        </div>
+      </div>`;
+    } else if (!myVoteVal) {
+      // Not yet voted
+      html += `<div class="vote-actions">
+        <button class="btn-approve" onclick="castVote('${app.applicationId}','approve')">✓ Approve</button>
+        <button class="btn-reject" onclick="castVote('${app.applicationId}','reject')">✗ Reject</button>
+        <button class="btn-info" onclick="toggleInfoForm('${app.applicationId}')">? More Info</button>
+      </div>
+      <div class="info-form" id="info-form-${app.applicationId}">
+        <textarea id="info-text-${app.applicationId}" placeholder="What information do you need from the applicant? Be specific."></textarea>
+        <button class="btn-send-info" onclick="submitInfoRequest('${app.applicationId}')">Send Information Request</button>
+      </div>`;
+    } else if (myVoteVal === 'info') {
+      html += `<div class="voted-display">You requested more information. Waiting for applicant response.</div>`;
+      // Still allow adding more questions while awaiting
+      if (app.status === 'awaiting_info') {
+        html += `<button class="btn-info" onclick="toggleInfoForm('${app.applicationId}')">+ Add another question</button>
+        <div class="info-form" id="info-form-${app.applicationId}">
+          <textarea id="info-text-${app.applicationId}" placeholder="Additional question for the applicant..."></textarea>
+          <button class="btn-send-info" onclick="submitInfoRequest('${app.applicationId}')">Send Additional Question</button>
+        </div>`;
+      }
+    }
+  }
+
+  // PDF link for closed
+  if (isClosed && app.pdfUrl) {
+    html += `<a href="${app.pdfUrl}" target="_blank" style="display:inline-block;background:#f4f5f7;border:1px solid #e2e5ea;color:#1a5a9e;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;margin-top:6px;">📄 Download PDF Record</a>`;
+  }
+
+  return html;
+}
+
+function toggleCard(appId) {
+  const body = document.getElementById(`expand-${appId}`);
+  const arrow = document.getElementById(`arrow-${appId}`);
+  body.classList.toggle('open');
+  arrow.classList.toggle('open');
+}
+
+function showVoteChange(appId) {
+  document.getElementById(`vote-change-${appId}`).style.display = 'block';
+}
+
+function toggleInfoForm(appId) {
+  const form = document.getElementById(`info-form-${appId}`);
+  form.classList.toggle('open');
+}
+
+async function castVote(appId, voteType) {
+  try {
+    const res = await fetch('/api/vote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessToken: token, applicationId: appId, voteType })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`Vote recorded: ${voteType === 'approve' ? '✓ Approved' : '✗ Rejected'}`);
+      setTimeout(() => loadPortal(), 1000);
+    } else {
+      showToast(data.error || 'Vote failed', true);
+    }
+  } catch (err) {
+    showToast('Error casting vote', true);
+  }
+}
+
+async function submitInfoRequest(appId) {
+  const question = document.getElementById(`info-text-${appId}`).value.trim();
+  if (!question) { showToast('Please enter your question', true); return; }
+
+  try {
+    const res = await fetch('/api/info-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessToken: token, applicationId: appId, question })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Information request submitted. Applicant will be notified.');
+      setTimeout(() => loadPortal(), 1000);
+    } else {
+      showToast(data.error || 'Failed to submit request', true);
+    }
+  } catch (err) {
+    showToast('Error submitting request', true);
+  }
+}
+
+function showToast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = isError ? '#d84a30' : '#1a3a5c';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function showError(msg) {
+  document.getElementById('main-content').innerHTML = `
+    <div class="error-card" style="margin-top:40px;">
+      <p style="font-size:16px;font-weight:700;margin-bottom:8px;">Access Error</p>
+      <p>${msg}</p>
+    </div>`;
+}
+
+loadPortal();
+</script>
+</body>
+</html>
