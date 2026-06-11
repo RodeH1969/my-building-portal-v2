@@ -64,9 +64,14 @@ async function castVote(applicationId, memberId, voteType) {
   const app = freshSnap.val();
 
   if (triggerFinalization) {
-    await finalizeApplication(applicationId, app);
+    // Only finalize if status actually changed to terminal state
+    if (['approved', 'rejected'].includes(app.status) && !app.auditSnapshot) {
+      await finalizeApplication(applicationId, app);
+    } else {
+      console.log('Skipping finalization - already finalized or wrong status:', app.status);
+    }
   } else if (previousVote && previousVote !== voteType && voteType !== 'info') {
-    await email.notifyManagerVoteChanged(app, app.votes[memberId].name || memberId, previousVote, voteType);
+    await email.notifyManagerVoteChanged(app, (app.votes[memberId] && app.votes[memberId].memberName) || memberId, previousVote, voteType);
   }
 
   return { success: true, status: nextStatus, previousVote };
@@ -74,6 +79,7 @@ async function castVote(applicationId, memberId, voteType) {
 
 // ─── FINALIZE APPLICATION ───
 async function finalizeApplication(applicationId, app) {
+  console.log('Finalizing application:', applicationId, 'outcome:', app.outcome || app.status);
   const now = new Date().toISOString();
 
   // Build audit snapshot

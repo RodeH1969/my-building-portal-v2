@@ -269,6 +269,30 @@ router.post('/respond', async (req, res) => {
   }
 });
 
+// ─── ADMIN: CLEANUP TEST DATA ───
+router.post('/admin/cleanup', async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (password !== process.env.ADMIN_PASSWORD) return res.status(403).json({ error: 'Forbidden' });
+
+    const snap = await db.ref('applications').once('value');
+    if (!snap.exists()) return res.json({ deleted: 0 });
+
+    const apps = snap.val();
+    let deleted = 0;
+    for (const [id, app] of Object.entries(apps)) {
+      // Delete applications stuck in pending_vote with no outcome and no auditSnapshot
+      if (app.status === 'pending_vote' && !app.auditSnapshot) {
+        await db.ref(`applications/${id}`).remove();
+        deleted++;
+      }
+    }
+    res.json({ success: true, deleted });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── ADMIN: GET ALL APPLICATIONS ───
 router.get('/admin/applications', async (req, res) => {
   try {
