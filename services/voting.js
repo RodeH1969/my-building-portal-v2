@@ -77,15 +77,18 @@ async function finalizeApplication(applicationId, app) {
   const now = new Date().toISOString();
 
   // Build audit snapshot
+  // Helper to sanitize undefined values for Firebase
+  const clean = val => (val === undefined || val === null) ? null : val;
+
   const voteBreakdown = app.committeeSnapshot.members.map(m => {
     const v = app.votes && app.votes[m.id];
     return {
-      memberName: m.name,
-      memberEmail: m.email,
-      vote: v ? v.vote : null,
-      votedAt: v ? v.votedAt : null,
-      changedFrom: v ? v.changedFrom : null,
-      changedAt: v ? v.changedAt : null
+      memberName: m.name || null,
+      memberEmail: m.email || null,
+      vote: (v && v.vote) ? v.vote : null,
+      votedAt: (v && v.votedAt) ? v.votedAt : null,
+      changedFrom: (v && v.changedFrom != null) ? v.changedFrom : null,
+      changedAt: (v && v.changedAt != null) ? v.changedAt : null
     };
   });
 
@@ -101,7 +104,19 @@ async function finalizeApplication(applicationId, app) {
     formDataSnapshot: app.formData || {}
   };
 
-  await db.ref(`applications/${applicationId}/auditSnapshot`).set(auditSnapshot);
+  // Deep sanitize — Firebase rejects undefined values anywhere in the tree
+  function sanitize(obj) {
+    if (obj === undefined) return null;
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(sanitize);
+    const result = {};
+    for (const [k, v] of Object.entries(obj)) {
+      result[k] = sanitize(v);
+    }
+    return result;
+  }
+
+  await db.ref(`applications/${applicationId}/auditSnapshot`).set(sanitize(auditSnapshot));
 
   // Get fresh app with audit snapshot
   const finalSnap = await db.ref(`applications/${applicationId}`).once('value');
