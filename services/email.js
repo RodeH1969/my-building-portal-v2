@@ -1,5 +1,7 @@
 const sgMail = require('@sendgrid/mail');
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+const { db } = require('../config/firebase');
+const { v4: uuidv4 } = require('uuid');
 
 const FROM = { email: process.env.SENDGRID_FROM, name: 'My Building Portal' };
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
@@ -7,6 +9,30 @@ const MANAGER_EMAIL = process.env.MANAGER_EMAIL || 'airbrandr@gmail.com';
 
 // ─── DELAY HELPER ───
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// ─── EMAIL LOG HELPER ───
+async function logEmail({ to, subject, type, applicationId, ref, buildingKey }) {
+  try {
+    const logId = uuidv4();
+    const now = new Date();
+    const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const entry = {
+      to: to || null,
+      subject: subject || null,
+      type: type || null,
+      applicationId: applicationId || null,
+      ref: ref || null,
+      sentAt: now.toISOString()
+    };
+    if (buildingKey) {
+      await db.ref(`email_log/${buildingKey}/${yearMonth}/${logId}`).set(entry);
+    } else {
+      await db.ref(`email_log/_general/${yearMonth}/${logId}`).set(entry);
+    }
+  } catch (err) {
+    console.error('Email log failed:', err.message);
+  }
+}
 
 // ─── BASE EMAIL WRAPPER ───
 function baseEmail(content) {
@@ -79,6 +105,7 @@ async function sendWelcomeEmail(member, building) {
     subject: `Welcome to My Building Portal — ${building.name} Committee`,
     html
   });
+  await logEmail({ to: member.email, subject: `Welcome — ${building.name} Committee`, type: 'welcome', buildingKey: member.buildingKey });
 }
 
 // ─── 2. NEW APPLICATION NOTIFICATION TO COMMITTEE MEMBERS ───
@@ -106,6 +133,7 @@ async function sendNewApplicationToCommittee(members, app) {
         subject: `Vote Required: ${app.formLabel} — Lot ${app.lot}, ${app.building} [${app.ref}]`,
         html
       });
+      await logEmail({ to: member.email, subject: `Vote Required: ${app.formLabel} [${app.ref}]`, type: 'vote_required', applicationId: app.applicationId, ref: app.ref, buildingKey: app.buildingKey });
       console.log(`New app email sent to ${member.name}`);
     } catch (err) {
       console.error(`Failed to email ${member.name}:`, err.message);
@@ -136,6 +164,7 @@ async function sendApplicantConfirmation(app) {
     subject: `Application received: ${app.formLabel} [${app.ref}]`,
     html
   });
+  await logEmail({ to: app.submittedByEmail, subject: `Application received [${app.ref}]`, type: 'applicant_confirmation', applicationId: app.applicationId, ref: app.ref, buildingKey: app.buildingKey });
 }
 
 // ─── 4. INFO REQUEST TO APPLICANT ───
@@ -175,6 +204,7 @@ async function sendInfoRequestToApplicant(app, questions, responseToken) {
     subject: `Further information required — Your ${app.formLabel} [${app.ref}]`,
     html
   });
+  await logEmail({ to: app.submittedByEmail, subject: `Further information required [${app.ref}]`, type: 'info_request', applicationId: app.applicationId, ref: app.ref, buildingKey: app.buildingKey });
 }
 
 // ─── 5. INFO ADDENDUM TO APPLICANT ───
@@ -198,6 +228,7 @@ async function sendInfoAddendum(app, newQuestion) {
     subject: `Additional question — Your ${app.formLabel} [${app.ref}]`,
     html
   });
+  await logEmail({ to: app.submittedByEmail, subject: `Additional question [${app.ref}]`, type: 'info_addendum', applicationId: app.applicationId, ref: app.ref, buildingKey: app.buildingKey });
 }
 
 // ─── 6. APPLICANT RESPONDED — NOTIFY COMMITTEE ───
@@ -223,6 +254,7 @@ async function sendApplicantRespondedToCommittee(members, app) {
         subject: `Applicant responded — ${app.formLabel} Lot ${app.lot} [${app.ref}] — Please review`,
         html
       });
+      await logEmail({ to: member.email, subject: `Applicant responded [${app.ref}]`, type: 'applicant_responded', applicationId: app.applicationId, ref: app.ref, buildingKey: app.buildingKey });
     } catch (err) {
       console.error(`Failed to email ${member.name}:`, err.message);
     }
@@ -259,6 +291,7 @@ async function sendOutcomeToApplicant(app) {
     subject: `Your application has been ${approved ? 'APPROVED ✓' : 'REJECTED ✗'} — ${app.formLabel} [${app.ref}]`,
     html
   });
+  await logEmail({ to: app.submittedByEmail, subject: `Application ${approved ? 'APPROVED' : 'REJECTED'} [${app.ref}]`, type: 'outcome_applicant', applicationId: app.applicationId, ref: app.ref, buildingKey: app.buildingKey });
 }
 
 // ─── 8. BUILDING MANAGER NOTIFICATIONS ───
@@ -277,54 +310,66 @@ async function notifyManager(subject, content) {
   }
 }
 
+async function notifyManagerLogged(subject, content, app, type) {
+  await notifyManager(subject, content);
+  await logEmail({ to: MANAGER_EMAIL, subject, type: type || 'manager_notification', applicationId: app && app.applicationId, ref: app && app.ref, buildingKey: app && app.buildingKey });
+}
+
 async function notifyManagerNewSubmission(app) {
-  await notifyManager(
-    `New submission: ${app.formLabel} — Lot ${app.lot}, ${app.building} [${app.ref}]`,
-    `<p style="color:#5a6478;font-size:13px;">A new application has been submitted and sent to the committee for voting.</p>${appSummary(app)}`
+  const subject = `New submission: ${app.formLabel} — Lot ${app.lot}, ${app.building} [${app.ref}]`;
+  await notifyManagerLogged(subject,
+    `<p style="color:#5a6478;font-size:13px;">A new application has been submitted and sent to the committee for voting.</p>${appSummary(app)}`,
+    app, 'new_submission'
   );
 }
 
 async function notifyManagerOutcome(app) {
-  const approved = app.outcome === 'approved';
+  const outcome = app.outcome || app.status || 'decided';
+  app = { ...app, outcome };
+  const approved = outcome === 'approved';
   const votes = app.auditSnapshot && app.auditSnapshot.voteBreakdown
     ? app.auditSnapshot.voteBreakdown.map(v =>
         `<tr><td style="padding:3px 0;color:#5a6478;font-size:12px;">${v.memberName}</td><td style="font-weight:600;color:${v.vote === 'approve' ? '#2d9e5c' : v.vote === 'reject' ? '#d84a30' : '#c4a038'};font-size:12px;">${v.vote || 'Did not vote'}</td></tr>`
       ).join('')
     : '';
 
-  await notifyManager(
-    `${approved ? 'APPROVED ✓' : 'REJECTED ✗'} — ${app.formLabel} Lot ${app.lot}, ${app.building} [${app.ref}]`,
+  const subject = `${approved ? 'APPROVED ✓' : 'REJECTED ✗'} — ${app.formLabel} Lot ${app.lot}, ${app.building} [${app.ref}]`;
+  await notifyManagerLogged(subject,
     `
-      <p style="color:#5a6478;font-size:13px;">A majority has been reached. The application has been <strong style="color:${approved ? '#2d9e5c' : '#d84a30'};">${app.outcome.toUpperCase()}</strong>.</p>
+      <p style="color:#5a6478;font-size:13px;">A majority has been reached. The application has been <strong style="color:${approved ? '#2d9e5c' : '#d84a30'};">${outcome.toUpperCase()}</strong>.</p>
       ${appSummary(app)}
       ${votes ? `<div style="background:#f4f5f7;border-radius:8px;padding:12px;margin-top:12px;"><p style="font-size:11px;font-weight:700;color:#1a2333;margin:0 0 8px;">Vote breakdown:</p><table style="width:100%;">${votes}</table></div>` : ''}
-    `
+    `,
+    app, 'outcome_manager'
   );
 }
 
 async function notifyManagerVoteChanged(app, memberName, oldVote, newVote) {
-  await notifyManager(
-    `Vote changed — ${memberName}: ${oldVote} → ${newVote} — ${app.formLabel} Lot ${app.lot} [${app.ref}]`,
-    `<p style="color:#5a6478;font-size:13px;"><strong>${memberName}</strong> changed their vote from <strong>${oldVote}</strong> to <strong>${newVote}</strong>.</p>${appSummary(app)}`
+  const subject = `Vote changed — ${memberName}: ${oldVote} → ${newVote} — ${app.formLabel} Lot ${app.lot} [${app.ref}]`;
+  await notifyManagerLogged(subject,
+    `<p style="color:#5a6478;font-size:13px;"><strong>${memberName}</strong> changed their vote from <strong>${oldVote}</strong> to <strong>${newVote}</strong>.</p>${appSummary(app)}`,
+    app, 'vote_changed'
   );
 }
 
 async function notifyManagerStuck(app) {
   const votes = app.votes ? Object.values(app.votes).filter(v => v.vote).length : 0;
-  await notifyManager(
-    `⚠️ No majority after 7 days — ${app.formLabel} Lot ${app.lot}, ${app.building} [${app.ref}]`,
+  const subject = `⚠️ No majority after 7 days — ${app.formLabel} Lot ${app.lot}, ${app.building} [${app.ref}]`;
+  await notifyManagerLogged(subject,
     `
       <p style="color:#5a6478;font-size:13px;">This application has been open for 7 days without a majority. Current votes: <strong>${votes}</strong> of <strong>${app.committeeSnapshot.requiredVotes}</strong> required.</p>
       ${appSummary(app)}
       <p style="color:#5a6478;font-size:13px;">The application will automatically lapse after 14 days if no majority is reached.</p>
-    `
+    `,
+    app, 'stuck_alert'
   );
 }
 
 async function notifyManagerLapsed(app) {
-  await notifyManager(
-    `LAPSED — ${app.formLabel} Lot ${app.lot}, ${app.building} [${app.ref}] — 14 days no majority`,
-    `<p style="color:#5a6478;font-size:13px;">This application has been automatically lapsed after 14 days without a majority. The applicant has been notified.</p>${appSummary(app)}`
+  const subject = `LAPSED — ${app.formLabel} Lot ${app.lot}, ${app.building} [${app.ref}] — 14 days no majority`;
+  await notifyManagerLogged(subject,
+    `<p style="color:#5a6478;font-size:13px;">This application has been automatically lapsed after 14 days without a majority. The applicant has been notified.</p>${appSummary(app)}`,
+    app, 'lapsed_manager'
   );
 }
 
@@ -352,6 +397,7 @@ async function sendDailyReminder(member, app, dayNumber) {
       subject: `Reminder [Day ${dayNumber}]: Vote required — ${app.formLabel} Lot ${app.lot} [${app.ref}]`,
       html
     });
+    await logEmail({ to: member.email, subject: `Reminder Day ${dayNumber} [${app.ref}]`, type: 'daily_reminder', applicationId: app.applicationId, ref: app.ref, buildingKey: app.buildingKey });
     console.log(`Day ${dayNumber} reminder sent to ${member.name}`);
   } catch (err) {
     console.error(`Reminder failed for ${member.name}:`, err.message);
@@ -380,6 +426,7 @@ async function sendTokenRegenerated(member, building) {
     subject: `Your portal access link has been updated — ${building.name}`,
     html
   });
+  await logEmail({ to: member.email, subject: `Portal link regenerated — ${building.name}`, type: 'token_regenerated', buildingKey: member.buildingKey });
 }
 
 // ─── 11. LAPSED NOTIFICATION TO APPLICANT ───
@@ -402,6 +449,7 @@ async function sendLapsedToApplicant(app) {
     subject: `Application lapsed — ${app.formLabel} [${app.ref}]`,
     html
   });
+  await logEmail({ to: app.submittedByEmail, subject: `Application lapsed [${app.ref}]`, type: 'lapsed_applicant', applicationId: app.applicationId, ref: app.ref, buildingKey: app.buildingKey });
 }
 
 module.exports = {
