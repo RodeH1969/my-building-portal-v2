@@ -6,18 +6,20 @@ const { v4: uuidv4 } = require('uuid');
 
 // ─── CAST OR CHANGE VOTE ───
 async function castVote(applicationId, memberId, voteType) {
-  let triggerFinalization = false;
+  let iFinalized = false;  // true ONLY if THIS call was the one that wrote the terminal status
   let nextStatus = null;
   let previousVote = null;
-  let appSnapshot = null;
+  let previousStatus = null;
 
-  // Atomic transaction
+  // Atomic transaction — Firebase guarantees only one concurrent caller wins
   await db.ref(`applications/${applicationId}`).transaction(appData => {
     if (!appData) return appData;
 
-    // Guard: locked states
+    previousStatus = appData.status;
+
+    // Guard: already terminal — do nothing, return undefined to abort
     if (['approved', 'rejected', 'lapsed'].includes(appData.status)) {
-      throw new Error('APPLICATION_LOCKED');
+      return; // abort — no change
     }
 
     const votes = appData.votes || {};
@@ -43,10 +45,10 @@ async function castVote(applicationId, memberId, voteType) {
 
     if (approvals >= required) {
       nextStatus = 'approved';
-      triggerFinalization = true;
+      iFinalized = true;  // this transaction call is the one writing the terminal status
     } else if (rejections >= required) {
       nextStatus = 'rejected';
-      triggerFinalization = true;
+      iFinalized = true;
     } else if (voteType === 'info' && appData.status === 'pending_vote') {
       nextStatus = 'awaiting_info';
     }
@@ -55,7 +57,6 @@ async function castVote(applicationId, memberId, voteType) {
     appData.status = nextStatus;
     appData.lastUpdatedAt = now;
 
-    appSnapshot = { ...appData };
     return appData;
   });
 
@@ -63,13 +64,10 @@ async function castVote(applicationId, memberId, voteType) {
   const freshSnap = await db.ref(`applications/${applicationId}`).once('value');
   const app = freshSnap.val();
 
-  if (triggerFinalization) {
-    // Only finalize if status actually changed to terminal state
-    if (['approved', 'rejected'].includes(app.status) && !app.auditSnapshot) {
-      await finalizeApplication(applicationId, app);
-    } else {
-      console.log('Skipping finalization - already finalized or wrong status:', app.status);
-    }
+  if (iFinalized) {
+    // iFinalized is only true for the ONE transaction call that wrote the terminal status.
+    // Any subsequent voters hit the 'return' abort above and never set iFinalized.
+    await finalizeApplication(applicationId, app);
   } else if (previousVote && previousVote !== voteType && voteType !== 'info') {
     await email.notifyManagerVoteChanged(app, (app.votes[memberId] && app.votes[memberId].memberName) || memberId, previousVote, voteType);
   }
