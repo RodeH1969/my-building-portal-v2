@@ -12,7 +12,7 @@ async function castVote(applicationId, memberId, voteType) {
   let previousStatus = null;
 
   // Atomic transaction — Firebase guarantees only one concurrent caller wins
-  await db.ref(`applications/${applicationId}`).transaction(appData => {
+  const txResult = await db.ref(`applications/${applicationId}`).transaction(appData => {
     if (!appData) return appData;
 
     previousStatus = appData.status;
@@ -55,23 +55,21 @@ async function castVote(applicationId, memberId, voteType) {
 
     appData.votes = votes;
     appData.status = nextStatus;
-    appData.outcome = iFinalized ? nextStatus : (appData.outcome || null);
-    appData.outcomeAt = iFinalized ? now : (appData.outcomeAt || null);
     appData.lastUpdatedAt = now;
 
     return appData;
   });
 
-  // Post-transaction actions
-  const freshSnap = await db.ref(`applications/${applicationId}`).once('value');
-  const app = freshSnap.val();
+  // Use the snapshot from the transaction result — guaranteed to be the exact
+  // state at the moment iFinalized became true. No second read, no race window.
+  const app = txResult.snapshot.val();
 
-  if (iFinalized) {
+  if (iFinalized && txResult.committed) {
     // iFinalized is only true for the ONE transaction call that wrote the terminal status.
     // Any subsequent voters hit the 'return' abort above and never set iFinalized.
     await finalizeApplication(applicationId, app);
   } else if (previousVote && previousVote !== voteType && voteType !== 'info') {
-    await email.notifyManagerVoteChanged(app, (app.votes[memberId] && app.votes[memberId].memberName) || memberId, previousVote, voteType);
+    await email.notifyManagerVoteChanged(app, (app && app.votes && app.votes[memberId] && app.votes[memberId].memberName) || memberId, previousVote, voteType);
   }
 
   return { success: true, status: nextStatus, previousVote };

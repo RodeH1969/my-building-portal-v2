@@ -1524,7 +1524,12 @@ function submitForm() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   })
-  .then(function(r) { return r.json(); })
+  .then(function(response) {
+    if (!response.ok) {
+      return response.json().then(function(err) { throw new Error(err.error || 'Server error ' + response.status); });
+    }
+    return response.json();
+  })
   .then(function(data) {
     if (data.ref) {
       document.getElementById('suc-ref').textContent = 'REF #' + data.ref;
@@ -1539,7 +1544,7 @@ function submitForm() {
     }
   })
   .catch(function(err) {
-    alert('Network error. Please try again.');
+    alert('Error: ' + err.message);
     if (btn) { btn.disabled = false; btn.textContent = 'Submit →'; }
   });
 }

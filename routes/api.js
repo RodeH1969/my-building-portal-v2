@@ -26,7 +26,7 @@ router.post('/submit', async (req, res) => {
     if (allMembers.length === 0) return res.status(400).json({ error: 'No committee members found' });
 
     const committeeSize = allMembers.length;
-    const requiredVotes = MAJORITY[committeeSize] || Math.ceil(committeeSize / 2);
+    const requiredVotes = MAJORITY[committeeSize] || Math.floor(committeeSize / 2) + 1;
     const needsVote = VOTING_FORMS.includes(formId);
 
     const applicationId = uuidv4();
@@ -81,21 +81,26 @@ router.post('/submit', async (req, res) => {
 
     await db.ref(`applications/${applicationId}`).set(application);
 
-    // Send emails
-    if (needsVote) {
-      const membersWithTokens = allMembers.map(m => ({
-        id: m.memberId,
-        name: m.name,
-        email: m.email,
-        accessToken: m.accessToken
-      }));
-      await email.sendNewApplicationToCommittee(membersWithTokens, application);
-    }
-
-    await email.sendApplicantConfirmation(application);
-    await email.notifyManagerNewSubmission(application);
-
+    // Respond immediately — don't make the user wait for emails
     res.json({ success: true, ref, applicationId });
+
+    // Build membersWithTokens for committee emails
+    const membersWithTokens = allMembers.map(m => ({
+      id: m.memberId,
+      name: m.name,
+      email: m.email,
+      accessToken: m.accessToken
+    }));
+
+    // Fire all emails concurrently in background
+    const emailPromises = [
+      email.sendApplicantConfirmation(application),
+      email.notifyManagerNewSubmission(application)
+    ];
+    if (needsVote) {
+      emailPromises.push(email.sendNewApplicationToCommittee(membersWithTokens, application));
+    }
+    Promise.all(emailPromises).catch(err => console.error('Background email error:', err.message));
 
   } catch (err) {
     console.error('Submit error:', err);
