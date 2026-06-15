@@ -55,6 +55,8 @@ async function castVote(applicationId, memberId, voteType) {
 
     appData.votes = votes;
     appData.status = nextStatus;
+    appData.outcome = iFinalized ? nextStatus : (appData.outcome || null);
+    appData.outcomeAt = iFinalized ? now : (appData.outcomeAt || null);
     appData.lastUpdatedAt = now;
 
     return appData;
