@@ -68,6 +68,22 @@ function appSummary(app) {
   `;
 }
 
+// ─── ATTACHMENT LINKS ───
+function attachmentLinks(app) {
+  if (!app.attachments || app.attachments.length === 0) return '';
+  const links = app.attachments.map(att => {
+    const icon = att.contentType && att.contentType.startsWith('image/') ? '\U0001f5bc' : '\U0001f4c4';
+    const sizeKb = att.size ? Math.round(att.size / 1024) + ' KB' : '';
+    return `<tr><td style="padding:4px 0;"><a href="${att.url}" target="_blank" style="color:#1a5a9e;font-size:12px;text-decoration:none;font-weight:600;">${icon} ${att.originalName}</a></td><td style="color:#9aa3b2;font-size:11px;padding:4px 0 4px 10px;">${sizeKb}</td></tr>`;
+  }).join('');
+  return `
+    <div style="background:#f0f5fc;border:1px solid #c5d8f5;border-radius:8px;padding:12px 14px;margin:12px 0;">
+      <p style="font-size:11px;font-weight:700;color:#1a5a9e;margin:0 0 8px;text-transform:uppercase;letter-spacing:0.06em;">Attachments (${app.attachments.length})</p>
+      <table style="width:100%;border-collapse:collapse;">${links}</table>
+    </div>
+  `;
+}
+
 // ─── PORTAL BUTTON ───
 function portalBtn(token, text) {
   return `
@@ -119,6 +135,7 @@ async function sendNewApplicationToCommittee(members, app) {
         A new <strong>${app.formLabel}</strong> has been submitted and requires your vote.
       </p>
       ${appSummary(app)}
+      ${attachmentLinks(app)}
       <p style="color:#5a6478;font-size:13px;line-height:1.6;">
         Please log in to your portal to review the full application and cast your vote.
       </p>
@@ -153,6 +170,7 @@ async function sendApplicantConfirmation(app) {
       <span style="font-size:22px;font-weight:700;color:#a07c20;letter-spacing:0.08em;">${app.ref}</span>
     </div>
     ${appSummary(app)}
+    ${attachmentLinks(app)}
     <p style="color:#5a6478;font-size:13px;line-height:1.6;">
       Your application has been sent to the body corporate committee for consideration. You will be notified of the outcome by email. Please retain your reference number for your records.
     </p>

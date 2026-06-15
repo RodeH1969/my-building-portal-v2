@@ -237,6 +237,25 @@ function renderExpandedCard(app, myVoteVal, isClosed) {
     html += `</div>`;
   }
 
+  // Attachments
+  if (app.attachments && app.attachments.length > 0) {
+    html += `<div style="background:#f0f5fc;border:1px solid #c5d8f5;border-radius:8px;padding:12px;margin-bottom:14px;">
+      <div style="font-size:10px;font-weight:700;color:#1a5a9e;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">\u{1F4CE} Attachments (${app.attachments.length})</div>`;
+    app.attachments.forEach(function(att) {
+      const icon = att.contentType && att.contentType.startsWith('image/') ? '\u{1F5BC}' : '\u{1F4C4}';
+      const sizeKb = att.size ? Math.round(att.size / 1024) + ' KB' : '';
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #dce8f8;">
+        <span style="font-size:16px;">${icon}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;color:#1a2333;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${att.originalName}</div>
+          <div style="font-size:10px;color:#9aa3b2;">${att.fieldName} \u00B7 ${sizeKb}</div>
+        </div>
+        <a href="${att.url}" target="_blank" style="flex-shrink:0;background:#1a5a9e;color:#fff;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;">View</a>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
   // Info thread
   if (app.infoThread) {
     const entries = Object.values(app.infoThread).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));

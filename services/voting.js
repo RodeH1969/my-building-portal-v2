@@ -137,33 +137,20 @@ async function finalizeApplication(applicationId, app) {
   }
 
   // Send emails
-  await email.sendOutcomeToApplicant(finalApp);
+  // 1. Notify the applicant (owner) of the outcome
+  if (finalApp.submittedByEmail) {
+    await email.sendOutcomeToApplicant(finalApp);
+    console.log(`Outcome email sent to applicant: ${finalApp.submittedByEmail}`);
+  } else {
+    console.warn(`No submittedByEmail on application ${applicationId} — applicant outcome email skipped`);
+  }
+
+  // 2. Notify the building manager
   await email.notifyManagerOutcome(finalApp);
 
-  // Notify committee of outcome
-  const members = app.committeeSnapshot.members;
-  for (let i = 0; i < members.length; i++) {
-    if (i > 0) await new Promise(r => setTimeout(r, 300));
-    const member = members[i];
-    // Get member's access token
-    const memberSnap = await db.ref(`committee_members/${member.id}`).once('value');
-    if (memberSnap.exists()) {
-      const memberData = memberSnap.val();
-      const outcome = finalApp.outcome === 'approved' ? 'APPROVED ✓' : 'REJECTED ✗';
-      try {
-        const sgMail = require('@sendgrid/mail');
-        const FROM = { email: process.env.SENDGRID_FROM, name: 'My Building Portal' };
-        await sgMail.send({
-          to: memberData.email,
-          from: FROM,
-          subject: `${outcome} — ${finalApp.formLabel} Lot ${finalApp.lot}, ${finalApp.building} [${finalApp.ref}]`,
-          html: `<p style="font-family:Arial;font-size:13px;">Dear ${memberData.name}, the application has been <strong>${finalApp.outcome}</strong>. Log in to your portal to view the full record.</p>`
-        });
-      } catch (err) {
-        console.error(`Outcome email failed for ${member.name}:`, err.message);
-      }
-    }
-  }
+  // Committee members do NOT receive an outcome notification email.
+  // They voted — they already know. Emailing them after every decision is noise
+  // and was causing spurious sends. They can view the outcome in their portal.
 }
 
 // ─── PROCESS PENDING QUESTIONS (30-min consolidation) ───

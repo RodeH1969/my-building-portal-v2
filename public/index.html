@@ -1507,22 +1507,31 @@ function submitForm() {
 
   var formData = def.collect();
 
-  var payload = {
-    building: state.building,
-    buildingKey: state.buildingKey,
-    lot: state.lot,
-    formId: state.formId,
-    formLabel: state.formLabel,
-    formData: formData
-  };
+  // Use FormData so files are sent as real multipart uploads
+  var fd = new FormData();
+  fd.append('building', state.building);
+  fd.append('buildingKey', state.buildingKey);
+  fd.append('lot', state.lot);
+  fd.append('formId', state.formId);
+  fd.append('formLabel', state.formLabel);
+  fd.append('formData', JSON.stringify(formData));
+
+  // Append every file from every upload field
+  Object.keys(uploadedFiles).forEach(function(fieldName) {
+    var files = uploadedFiles[fieldName];
+    if (!files) return;
+    for (var i = 0; i < files.length; i++) {
+      fd.append(fieldName, files[i], files[i].name);
+    }
+  });
 
   var btn = document.querySelector('.submit-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
 
+  // No Content-Type header — browser sets it automatically with the boundary for multipart
   fetch('/api/submit', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: fd
   })
   .then(function(response) {
     if (!response.ok) {

@@ -4,16 +4,21 @@ const { db } = require('../config/firebase');
 const { BUILDINGS, MAJORITY } = require('../config/committees');
 const email = require('../services/email');
 const voting = require('../services/voting');
+const { upload, uploadFilesToStorage } = require('../services/uploads');
 const { v4: uuidv4 } = require('uuid');
 
 // ─── FORMS THAT NEED COMMITTEE VOTE ───
 const VOTING_FORMS = ['pet', 'lot-improve', 'motion', 'payment-plan', 'discount', 'bylaws', 'refund', 'company-nominee'];
 
-// ─── SUBMIT APPLICATION ───
-router.post('/submit', async (req, res) => {
+// ─── SUBMIT APPLICATION — multipart/form-data ───
+// Frontend sends FormData: JSON fields as text, files as file fields
+router.post('/submit', upload.any(), async (req, res) => {
   try {
-    const { building, buildingKey, lot, formId, formLabel, formData } = req.body;
-    console.log('=== SUBMIT ===', { building, buildingKey, lot, formId, formLabel, email: formData && formData.email });
+    // FormData sends JSON fields as strings — parse formData back out
+    const { building, buildingKey, lot, formId, formLabel } = req.body;
+    const formData = req.body.formData ? JSON.parse(req.body.formData) : {};
+
+    console.log('=== SUBMIT ===', { building, buildingKey, lot, formId, formLabel, email: formData.email, files: req.files && req.files.length });
 
     const building_config = BUILDINGS[buildingKey];
     if (!building_config) return res.status(400).json({ error: 'Unknown building' });
@@ -32,6 +37,18 @@ router.post('/submit', async (req, res) => {
     const applicationId = uuidv4();
     const ref = 'MBP-' + Date.now().toString().slice(-6);
     const now = new Date().toISOString();
+
+    // ─── UPLOAD FILES TO FIREBASE STORAGE ───
+    let attachments = [];
+    if (req.files && req.files.length > 0) {
+      try {
+        attachments = await uploadFilesToStorage(req.files, applicationId);
+        console.log(`Uploaded ${attachments.length} files for ${applicationId}`);
+      } catch (uploadErr) {
+        console.error('File upload failed:', uploadErr.message);
+        // Don't block submission if upload fails — store empty, log it
+      }
+    }
 
     // Build votes object — all null initially
     const votes = {};
@@ -62,9 +79,10 @@ router.post('/submit', async (req, res) => {
       formId,
       formLabel,
       formData: formData || {},
+      attachments: attachments.length > 0 ? attachments : null,
       submittedAt: now,
-      submittedByName: formData && formData.name || 'Unknown',
-      submittedByEmail: formData && formData.email || null,
+      submittedByName: formData.name || 'Unknown',
+      submittedByEmail: formData.email || null,
       status: needsVote ? 'pending_vote' : 'received',
       lastUpdatedAt: now,
       committeeSnapshot,
@@ -81,7 +99,7 @@ router.post('/submit', async (req, res) => {
 
     await db.ref(`applications/${applicationId}`).set(application);
 
-    // Respond immediately — don't make the user wait for emails
+    // Respond immediately
     res.json({ success: true, ref, applicationId });
 
     // Build membersWithTokens for committee emails
@@ -92,7 +110,7 @@ router.post('/submit', async (req, res) => {
       accessToken: m.accessToken
     }));
 
-    // Fire all emails concurrently in background
+    // Fire all emails in background
     const emailPromises = [
       email.sendApplicantConfirmation(application),
       email.notifyManagerNewSubmission(application)
@@ -113,7 +131,6 @@ router.get('/portal/:accessToken', async (req, res) => {
   try {
     const { accessToken } = req.params;
 
-    // Find member by access token
     const membersSnap = await db.ref('committee_members')
       .orderByChild('accessToken').equalTo(accessToken).once('value');
 
@@ -126,7 +143,6 @@ router.get('/portal/:accessToken', async (req, res) => {
       return res.status(403).json({ error: 'This portal link has been deactivated' });
     }
 
-    // Get all applications for this building
     console.log('Portal query for buildingKey:', memberData.buildingKey);
     const appsSnap = await db.ref('applications')
       .orderByChild('buildingKey').equalTo(memberData.buildingKey).once('value');
@@ -134,7 +150,6 @@ router.get('/portal/:accessToken', async (req, res) => {
     const allApps = appsSnap.val() ? Object.values(appsSnap.val()) : [];
     console.log('Applications found:', allApps.length, allApps.map(a => ({ref: a.ref, status: a.status, buildingKey: a.buildingKey})));
 
-    // Separate active and closed
     const activeApps = allApps
       .filter(a => ['pending_vote', 'awaiting_info'].includes(a.status))
       .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
@@ -142,7 +157,7 @@ router.get('/portal/:accessToken', async (req, res) => {
     const closedApps = allApps
       .filter(a => ['approved', 'rejected', 'lapsed', 'received'].includes(a.status))
       .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt))
-      .slice(0, 20); // Last 20
+      .slice(0, 20);
 
     res.json({
       member: {
@@ -166,7 +181,6 @@ router.post('/vote', async (req, res) => {
   try {
     const { accessToken, applicationId, voteType } = req.body;
 
-    // Validate token → get member
     const membersSnap = await db.ref('committee_members')
       .orderByChild('accessToken').equalTo(accessToken).once('value');
 
@@ -175,7 +189,6 @@ router.post('/vote', async (req, res) => {
     const memberData = Object.values(membersSnap.val())[0];
     if (!memberData.active) return res.status(403).json({ error: 'Portal link deactivated' });
 
-    // Verify member is on this application's committee
     const appSnap = await db.ref(`applications/${applicationId}`).once('value');
     if (!appSnap.exists()) return res.status(404).json({ error: 'Application not found' });
 
@@ -184,7 +197,6 @@ router.post('/vote', async (req, res) => {
     if (!isMember) return res.status(403).json({ error: 'Not a member of this committee' });
 
     if (voteType === 'info') {
-      // Info request handled separately
       return res.status(400).json({ error: 'Use /api/info-request for more info requests' });
     }
 
@@ -241,7 +253,6 @@ router.get('/respond/:token', async (req, res) => {
     const appSnap = await db.ref(`applications/${tokenData.applicationId}`).once('value');
     const app = appSnap.val();
 
-    // Get questions from infoThread
     const questions = app.infoThread
       ? Object.values(app.infoThread).filter(e => e.type === 'question' || e.type === 'addendum')
       : [];
@@ -288,7 +299,6 @@ router.post('/admin/cleanup', async (req, res) => {
     const apps = snap.val();
     let deleted = 0;
     for (const [id, app] of Object.entries(apps)) {
-      // Delete applications stuck in pending_vote with no outcome and no auditSnapshot
       if (app.status === 'pending_vote' && !app.auditSnapshot) {
         await db.ref(`applications/${id}`).remove();
         deleted++;
