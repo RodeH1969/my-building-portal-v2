@@ -55,6 +55,8 @@ async function castVote(applicationId, memberId, voteType) {
 
     appData.votes = votes;
     appData.status = nextStatus;
+    appData.outcome = iFinalized ? nextStatus : (appData.outcome || null);
+    appData.outcomeAt = iFinalized ? now : (appData.outcomeAt || null);
     appData.lastUpdatedAt = now;
 
     return appData;
@@ -134,19 +136,33 @@ async function finalizeApplication(applicationId, app) {
     console.error('PDF generation failed:', err.message);
   }
 
-  // Send outcome emails — applicant and manager only
-  // Committee members see the result in their portal — no email needed
-  try {
-    await email.sendOutcomeToApplicant(finalApp);
-    console.log(`Outcome email sent to applicant: ${finalApp.submittedByEmail} — ${finalApp.outcome}`);
-  } catch (err) {
-    console.error('Applicant outcome email failed:', err.message);
-  }
+  // Send emails
+  await email.sendOutcomeToApplicant(finalApp);
+  await email.notifyManagerOutcome(finalApp);
 
-  try {
-    await email.notifyManagerOutcome(finalApp);
-  } catch (err) {
-    console.error('Manager outcome email failed:', err.message);
+  // Notify committee of outcome
+  const members = app.committeeSnapshot.members;
+  for (let i = 0; i < members.length; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, 300));
+    const member = members[i];
+    // Get member's access token
+    const memberSnap = await db.ref(`committee_members/${member.id}`).once('value');
+    if (memberSnap.exists()) {
+      const memberData = memberSnap.val();
+      const outcome = finalApp.outcome === 'approved' ? 'APPROVED ✓' : 'REJECTED ✗';
+      try {
+        const sgMail = require('@sendgrid/mail');
+        const FROM = { email: process.env.SENDGRID_FROM, name: 'My Building Portal' };
+        await sgMail.send({
+          to: memberData.email,
+          from: FROM,
+          subject: `${outcome} — ${finalApp.formLabel} Lot ${finalApp.lot}, ${finalApp.building} [${finalApp.ref}]`,
+          html: `<p style="font-family:Arial;font-size:13px;">Dear ${memberData.name}, the application has been <strong>${finalApp.outcome}</strong>. Log in to your portal to view the full record.</p>`
+        });
+      } catch (err) {
+        console.error(`Outcome email failed for ${member.name}:`, err.message);
+      }
+    }
   }
 }
 
