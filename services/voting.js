@@ -12,7 +12,7 @@ async function castVote(applicationId, memberId, voteType) {
   let previousStatus = null;
 
   // Atomic transaction — Firebase guarantees only one concurrent caller wins
-  const txResult = await db.ref(`applications/${applicationId}`).transaction(appData => {
+  await db.ref(`applications/${applicationId}`).transaction(appData => {
     if (!appData) return appData;
 
     previousStatus = appData.status;
@@ -60,16 +60,16 @@ async function castVote(applicationId, memberId, voteType) {
     return appData;
   });
 
-  // Use the snapshot from the transaction result — guaranteed to be the exact
-  // state at the moment iFinalized became true. No second read, no race window.
-  const app = txResult.snapshot.val();
+  // Post-transaction actions
+  const freshSnap = await db.ref(`applications/${applicationId}`).once('value');
+  const app = freshSnap.val();
 
-  if (iFinalized && txResult.committed) {
+  if (iFinalized) {
     // iFinalized is only true for the ONE transaction call that wrote the terminal status.
     // Any subsequent voters hit the 'return' abort above and never set iFinalized.
     await finalizeApplication(applicationId, app);
   } else if (previousVote && previousVote !== voteType && voteType !== 'info') {
-    await email.notifyManagerVoteChanged(app, (app && app.votes && app.votes[memberId] && app.votes[memberId].memberName) || memberId, previousVote, voteType);
+    await email.notifyManagerVoteChanged(app, (app.votes[memberId] && app.votes[memberId].memberName) || memberId, previousVote, voteType);
   }
 
   return { success: true, status: nextStatus, previousVote };
@@ -134,33 +134,19 @@ async function finalizeApplication(applicationId, app) {
     console.error('PDF generation failed:', err.message);
   }
 
-  // Send emails
-  await email.sendOutcomeToApplicant(finalApp);
-  await email.notifyManagerOutcome(finalApp);
+  // Send outcome emails — applicant and manager only
+  // Committee members see the result in their portal — no email needed
+  try {
+    await email.sendOutcomeToApplicant(finalApp);
+    console.log(`Outcome email sent to applicant: ${finalApp.submittedByEmail} — ${finalApp.outcome}`);
+  } catch (err) {
+    console.error('Applicant outcome email failed:', err.message);
+  }
 
-  // Notify committee of outcome
-  const members = app.committeeSnapshot.members;
-  for (let i = 0; i < members.length; i++) {
-    if (i > 0) await new Promise(r => setTimeout(r, 300));
-    const member = members[i];
-    // Get member's access token
-    const memberSnap = await db.ref(`committee_members/${member.id}`).once('value');
-    if (memberSnap.exists()) {
-      const memberData = memberSnap.val();
-      const outcome = finalApp.outcome === 'approved' ? 'APPROVED ✓' : 'REJECTED ✗';
-      try {
-        const sgMail = require('@sendgrid/mail');
-        const FROM = { email: process.env.SENDGRID_FROM, name: 'My Building Portal' };
-        await sgMail.send({
-          to: memberData.email,
-          from: FROM,
-          subject: `${outcome} — ${finalApp.formLabel} Lot ${finalApp.lot}, ${finalApp.building} [${finalApp.ref}]`,
-          html: `<p style="font-family:Arial;font-size:13px;">Dear ${memberData.name}, the application has been <strong>${finalApp.outcome}</strong>. Log in to your portal to view the full record.</p>`
-        });
-      } catch (err) {
-        console.error(`Outcome email failed for ${member.name}:`, err.message);
-      }
-    }
+  try {
+    await email.notifyManagerOutcome(finalApp);
+  } catch (err) {
+    console.error('Manager outcome email failed:', err.message);
   }
 }
 
